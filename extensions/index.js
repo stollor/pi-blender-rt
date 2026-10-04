@@ -540,6 +540,11 @@ export default function piBlenderRt(pi              ) {
         const ok = await ensureBackend();
         return textResult(ok ? "后端已重启：" + base() + "/" : "重启失败：/health 不通");
       }
+      // who/lease/release/launch/doctor/status 都要后端在场：冷启动先自举（否则首个调用必挂 Unable to connect）
+      if (op === "who" || op === "lease" || op === "release" || op === "launch" || op === "doctor" || op === "status") {
+        const notUp = await ready();
+        if (notUp) return textResult(notUp);
+      }
       if (op === "who" || op === "lease" || op === "release") {
         try {
           if (op === "who") {
