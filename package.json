@@ -5,7 +5,10 @@
   "type": "module",
   "main": "index.ts",
   "license": "MIT",
-  "keywords": ["pi", "extension", "blender", "3d", "modeling", "agent"],
+  "keywords": ["pi-package", "blender", "3d", "modeling", "agent"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
   "scripts": {
     "install-runtime": "powershell -ExecutionPolicy Bypass -File scripts/install-runtime.ps1"
   }
