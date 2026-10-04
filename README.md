@@ -36,10 +36,10 @@ DSH 只是上游的宿主壳；真正干活的后端 `runtime/server.mjs` 只依
 ## 安装
 
 ```bash
-pi install git:github.com/stollor/pi-blender-rt      # 装进 ~/.pi/agent/extensions/
+pi install git:github.com/stollor/pi-blender-rt      # 装进 pi 的包目录
 ```
 
-首次调用任意工具时会自动 `git clone` 上游 runtime 到 `vendor/`（也可手动：`scripts/install-runtime.ps1` / `.sh`）。上游 runtime 也可以用环境变量 `PI_BLENDER_RT_RUNTIME` 指向已有的 dsh-blender-plugin 仓库来复用。
+首次调用任意工具时会自动 `git clone` 上游 runtime 到包内 `extensions/vendor/`（也可手动：`scripts/install-runtime.ps1` / `.sh`）。上游 runtime 也可以用环境变量 `PI_BLENDER_RT_RUNTIME` 指向已有的 dsh-blender-plugin 仓库来复用。
 
 ### 验收（唯一判据，不可妥协）
 
@@ -86,6 +86,26 @@ blender_rt_see(from="9,-9,6", look_at="0,0,1")       # 换个角度看看（不�
 - headless 的「超时转 job」语义保留：客户端等待窗口到点返回 `run-…` 句柄，用 `blender_rt_job` 收结果。
 - 帧去重、560px 默认、渐进披露等省 token 设计全部保留。
 - 完整的人话回执格式化做了简化（结构化 JSON 回执直接给全，超长截断并注明）。
+
+## 仓库布局
+
+```
+pi-blender-rt/
+├── src/index.ts          # 唯一事实源（TypeScript）
+├── extensions/index.js   # 生成物（交付入口，已提交，`npm run build` 重新生成）
+├── scripts/build.mjs     # src/index.ts → extensions/index.js（Node 内置类型剥离）
+├── scripts/install-runtime.*  # 手动 vendor 上游 runtime（可选，首次调用也会自动引导）
+└── extensions/vendor/    # 自动引导 clone 的上游 dsh-blender-plugin（gitignore）
+```
+
+**为什么交付 `.js` 而不是 `.ts`**：pi 的包加载管线转译 TS 时会触发 Bun(JSC) 的确定性崩溃
+（`panic: index out of bounds`；同一文件用 `pi --extension` 直载完全正常，属上游 bug，已在
+README 记录以便复现）。交付 `stripTypeScriptTypes` 生成的 `.js` 绕开该转译路径；工具行为与上游一致。
+
+## 首次调用的小提示
+
+- 首次调用会引导 clone 上游 + 启动后端，比平时慢几秒（后续调用毫秒级）。
+- 模型并行发多个工具调用时，首个调用可能在后端就绪前撞上一次连接失败 —— 重试一次即可（引导已做并发去重）。
 
 ## 配置（环境变量）
 

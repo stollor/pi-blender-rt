@@ -3,13 +3,11 @@
   "version": "0.1.0",
   "description": "Drive Blender from pi: 15 realtime tools (see/do/watch/loop/headless/plan...) over the dsh-blender-plugin direct channel",
   "type": "module",
-  "main": "index.ts",
+  "main": "extensions/index.js",
   "license": "MIT",
   "keywords": ["pi-package", "blender", "3d", "modeling", "agent"],
-  "pi": {
-    "extensions": ["./index.ts"]
-  },
   "scripts": {
+    "build": "node scripts/build.mjs",
     "install-runtime": "powershell -ExecutionPolicy Bypass -File scripts/install-runtime.ps1"
   }
 }

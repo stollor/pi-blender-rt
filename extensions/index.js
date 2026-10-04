@@ -16,7 +16,7 @@
  * 验收判据（与上游一致，不可妥协）：blender_viewport(op="doctor") 必须返回 kind=ok。
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+                                                                    
 import { spawn, execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -34,7 +34,7 @@ const BACKEND_HINT =
   '后端不可用（127.0.0.1:PORT）。先 blender_viewport(op="start") 起后端；Blender 没跑再 op="launch" 一键拉起。';
 
 /** 扩展所在目录（jiti 下 import.meta.url 可用；兜底 cwd） */
-function extDir(): string {
+function extDir()         {
   try {
     // jiti 的 ESM 路径下 import.meta.url 指向本文件
     const u = import.meta?.url;
@@ -45,7 +45,7 @@ function extDir(): string {
     /* CJS 兜底走下面 */
   }
   try {
-    const d = (globalThis as any).__dirname;
+    const d = (globalThis       ).__dirname;
     if (typeof d === "string" && d) return d;
   } catch {
     /* ignore */
@@ -55,7 +55,7 @@ function extDir(): string {
 
 const HERE = extDir();
 
-function safeReaddir(p: string): string[] {
+function safeReaddir(p        )           {
   try {
     return fs.readdirSync(p);
   } catch {
@@ -69,8 +69,8 @@ function safeReaddir(p: string): string[] {
  *   2. <ext>/vendor/dsh-blender-plugin/runtime/server.mjs（scripts/install-runtime 装的）
  *   3. <ext>/vendor/node_modules/@dsh-external/dsh-blender-plugin/runtime/server.mjs
  */
-function findServerMjs(): string | null {
-  const roots: string[] = [];
+function findServerMjs()                {
+  const roots           = [];
   if (process.env.PI_BLENDER_RT_RUNTIME) roots.push(process.env.PI_BLENDER_RT_RUNTIME);
   roots.push(path.join(HERE, "vendor"));
   roots.push(path.join(HERE, "vendor", "node_modules", "@dsh-external", "dsh-blender-plugin"));
@@ -89,10 +89,10 @@ function findServerMjs(): string | null {
 }
 
 /** runtime 缺失时自动引导：git clone 上游到 vendor/（一次性，之后走本地） */
-async function bootstrapRuntime(): Promise<string | null> {
+async function bootstrapRuntime()                         {
   const target = path.join(HERE, "vendor", "dsh-blender-plugin");
   if (process.env.PI_BLENDER_RT_NO_BOOTSTRAP) return null;
-  await new Promise<void>((resolve) => {
+  await new Promise      ((resolve) => {
     const g = spawn("git", ["clone", "--depth", "1", "https://github.com/sixtysevenlf/dsh-blender-plugin.git", target], {
       stdio: "ignore",
     });
@@ -107,9 +107,9 @@ async function bootstrapRuntime(): Promise<string | null> {
  * 探测 blender.exe。上游自动探测只覆盖 Program Files / Steam 等标准位置，
  * 这里补上 %LOCALAPPDATA%\Tools\blender 等非标准安装位（探测不到就交给上游配置）。
  */
-function detectBlenderExe(): string | null {
+function detectBlenderExe()                {
   if (process.env.DSH_BLENDER_EXE) return process.env.DSH_BLENDER_EXE;
-  const cands: string[] = [];
+  const cands           = [];
   if (process.platform === "win32") {
     const lad = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
     cands.push(path.join(lad, "Tools", "blender", "blender.exe"));
@@ -137,20 +137,21 @@ function detectBlenderExe(): string | null {
   return null;
 }
 
-function port(): number {
+function port()         {
   const n = Number(process.env.PI_BLENDER_RT_PORT || process.env.DSH_BLENDER_HTTP_PORT || DEFAULT_PORT);
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_PORT;
 }
 
-function base(): string {
+function base()         {
   return "http://127.0.0.1:" + String(port());
 }
 
 let paused = false; // blender_viewport op=stop 之后尊重用户意图，不再自动拉起
-let child: ReturnType<typeof spawn> | null = null;
-let bootstrapping: Promise<string | null> | null = null;
+let child                                  = null;
+let bootstrapping                                = null;
+let ensuring                          = null; // 并发工具调用共用一次引导（防双 spawn / 双 clone）
 
-async function probeHttp(url: string, timeoutMs = 900): Promise<boolean> {
+async function probeHttp(url        , timeoutMs = 900)                   {
   try {
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), timeoutMs);
@@ -163,7 +164,7 @@ async function probeHttp(url: string, timeoutMs = 900): Promise<boolean> {
 }
 
 /** 解析后端响应：普通路由整段 JSON；流式路由（headless/worker/txn/preset）按行找最后一条非心跳 JSON */
-function parseBackendBody(text: string): any {
+function parseBackendBody(text        )      {
   const t = String(text == null ? "" : text);
   try {
     const o = JSON.parse(t);
@@ -175,10 +176,10 @@ function parseBackendBody(text: string): any {
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
-  let last: any = null;
+  let last      = null;
   let beats = 0;
   for (let i = lines.length - 1; i >= 0; i--) {
-    let o: any = null;
+    let o      = null;
     try {
       o = JSON.parse(lines[i]);
     } catch {
@@ -203,7 +204,7 @@ function parseBackendBody(text: string): any {
   return { ok: false, raw: t.slice(-500), parseError: "no JSON line found" };
 }
 
-async function backendGet(p: string, timeoutMs = 20000): Promise<any> {
+async function backendGet(p        , timeoutMs = 20000)               {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
@@ -218,7 +219,7 @@ async function backendGet(p: string, timeoutMs = 20000): Promise<any> {
 }
 
 /** 写操作统一入口：自动带 holder（租约门禁在后端按 holder 自动接管/续期），计时器活到 body 读完 */
-async function backendPost(p: string, body: any, timeoutMs = 60000): Promise<any> {
+async function backendPost(p        , body     , timeoutMs = 60000)               {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
@@ -238,7 +239,7 @@ async function backendPost(p: string, body: any, timeoutMs = 60000): Promise<any
 }
 
 /** 工具入参容错：`{...}` 字符串也当对象用（模型两种形态都给得出来） */
-function jsonPayload(v: any): any {
+function jsonPayload(v     )      {
   if (v === undefined || v === null || v === "") return {};
   if (typeof v === "string") {
     try {
@@ -253,12 +254,12 @@ function jsonPayload(v: any): any {
 }
 
 /** "--flag \"a b\" c" 切成 argv；数组直接透传 */
-function splitArgs(s: any): string[] {
+function splitArgs(s     )           {
   if (Array.isArray(s)) return s.map((x) => String(x));
   const str = String(s == null ? "" : s);
-  const out: string[] = [];
+  const out           = [];
   let cur = "";
-  let q: string | null = null;
+  let q                = null;
   for (const ch of str) {
     if (q) {
       if (ch === q) q = null;
@@ -283,7 +284,7 @@ function splitArgs(s: any): string[] {
 }
 
 /** 409 leased → 给模型一句能照着做的话 */
-function leasedText(r: any): string | undefined {
+function leasedText(r     )                     {
   if (!r || r.error !== "leased") return undefined;
   return (
     "写通道被别的会话占用（holder=" +
@@ -294,10 +295,18 @@ function leasedText(r: any): string | undefined {
   );
 }
 
-/** 后端进程管理：探活 → 缺 runtime 先引导 → spawn → 轮询 /health */
-async function ensureBackend(): Promise<boolean> {
+/** 后端进程管理：探活 → 缺 runtime 先引导 → spawn → 轮询 /health（并发调用共用同一次引导） */
+async function ensureBackend()                   {
   if (paused) return false;
   if (await probeHttp(base() + "/health")) return true;
+  if (ensuring) return ensuring;
+  ensuring = ensureBackendInner().finally(() => {
+    ensuring = null;
+  });
+  return ensuring;
+}
+
+async function ensureBackendInner()                   {
   let server = findServerMjs();
   if (!server) {
     if (!bootstrapping) bootstrapping = bootstrapRuntime();
@@ -305,7 +314,7 @@ async function ensureBackend(): Promise<boolean> {
     bootstrapping = null;
   }
   if (!server) return false;
-  const env: NodeJS.ProcessEnv = { ...process.env };
+  const env                    = { ...process.env };
   if (!env.DSH_BLENDER_EXE) {
     const exe = detectBlenderExe();
     if (exe) env.DSH_BLENDER_EXE = exe;
@@ -332,7 +341,7 @@ async function ensureBackend(): Promise<boolean> {
 // 帧获取 + 去重（上游的省 token 设计：同画面不重复附图）
 // ---------------------------------------------------------------------------
 
-async function fetchFrame(size: number, full = false, area = 0): Promise<{ png: Buffer; ms: number; hash: string }> {
+async function fetchFrame(size        , full = false, area = 0)                                                     {
   const t0 = Date.now();
   const url = base() + "/frame.png?" + (full ? "full=1&area=" + String(area) : "size=" + String(size));
   const r = await fetch(url);
@@ -341,7 +350,7 @@ async function fetchFrame(size: number, full = false, area = 0): Promise<{ png: 
   return { png, ms: Date.now() - t0, hash: createHash("md5").update(png).digest("hex").slice(0, 8) };
 }
 
-async function fetchView(spec: any, timeoutMs = 180000): Promise<{ png: Buffer; ms: number; meta: any; hash: string }> {
+async function fetchView(spec     , timeoutMs = 180000)                                                                {
   const t0 = Date.now();
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
@@ -354,7 +363,7 @@ async function fetchView(spec: any, timeoutMs = 180000): Promise<{ png: Buffer; 
     });
     if (!r.ok) {
       const text = await r.text();
-      let j: any = null;
+      let j      = null;
       try {
         j = JSON.parse(text);
       } catch {
@@ -362,7 +371,7 @@ async function fetchView(spec: any, timeoutMs = 180000): Promise<{ png: Buffer; 
       }
       throw new Error("view http " + String(r.status) + " · " + String((j && j.error) || text.slice(0, 300)));
     }
-    let meta: any = null;
+    let meta      = null;
     try {
       const rawHdr = String(r.headers.get("x-dsh-view") || "null");
       const txt = rawHdr.indexOf("%7B") === 0 ? decodeURIComponent(rawHdr) : rawHdr;
@@ -377,9 +386,9 @@ async function fetchView(spec: any, timeoutMs = 180000): Promise<{ png: Buffer; 
   }
 }
 
-const FRAME_CACHE = new Map<string, { hash: string; repeats: number }>();
+const FRAME_CACHE = new Map                                           ();
 
-function frameDedupe(key: string, hash: string, force = false): { dup: boolean; repeats: number } {
+function frameDedupe(key        , hash        , force = false)                                    {
   const k = String(key || "default");
   const cur = FRAME_CACHE.get(k);
   if (!force && cur && cur.hash === hash && hash) {
@@ -394,29 +403,29 @@ function frameDedupe(key: string, hash: string, force = false): { dup: boolean; 
   return { dup: false, repeats: 0 };
 }
 
-function dedupeNote(repeats: number): string {
+function dedupeNote(repeats        )         {
   return " · **与上一张完全相同**（第 " + String(repeats + 1) + " 次）⇒ 未重复附图；要重发传 force:true";
 }
 
-function imgBlock(png: Buffer): { type: "image"; data: string; mimeType: string } {
+function imgBlock(png        )                                                    {
   return { type: "image", data: png.toString("base64"), mimeType: "image/png" };
 }
 
-function textResult(text: string, extra?: Record<string, any>) {
-  return { content: [{ type: "text" as const, text }], details: { tool: "pi-blender-rt", ...(extra || {}) } };
+function textResult(text        , extra                      ) {
+  return { content: [{ type: "text"         , text }], details: { tool: "pi-blender-rt", ...(extra || {}) } };
 }
 
-function imgResult(text: string, pngs: Buffer[], extra?: Record<string, any>) {
+function imgResult(text        , pngs          , extra                      ) {
   return {
     content: [
-      { type: "text" as const, text },
+      { type: "text"         , text },
       ...pngs.map(imgBlock),
     ],
     details: { tool: "pi-blender-rt", ...(extra || {}) },
   };
 }
 
-function numTriple(v: any): number[] | undefined {
+function numTriple(v     )                       {
   if (v === undefined || v === null || v === "") return undefined;
   if (Array.isArray(v)) return v.map((x) => Number(x));
   return String(v)
@@ -425,23 +434,23 @@ function numTriple(v: any): number[] | undefined {
     .map((x) => Number(x));
 }
 
-function clip(s: any, n = 6000): string {
+function clip(s     , n = 6000)         {
   const t = typeof s === "string" ? s : JSON.stringify(s, null, 1);
   return t.length > n ? t.slice(0, n) + "\n…[已截断，共 " + String(t.length) + " 字符]" : t;
 }
 
-function newRunId(): string {
+function newRunId()         {
   return "run-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 }
 
 /** JSON Schema 小工具（不引 typebox 依赖；typebox 的 schema 本体就是 JSON Schema） */
 const S = {
-  str: (description: string) => ({ type: "string", description }),
-  num: (description: string) => ({ type: "number", description }),
-  int: (description: string) => ({ type: "integer", description }),
-  bool: (description: string) => ({ type: "boolean", description }),
-  json: (description: string) => ({ type: "object", additionalProperties: true, description }),
-  obj: (properties: Record<string, any>, required: string[] = []) => ({
+  str: (description        ) => ({ type: "string", description }),
+  num: (description        ) => ({ type: "number", description }),
+  int: (description        ) => ({ type: "integer", description }),
+  bool: (description        ) => ({ type: "boolean", description }),
+  json: (description        ) => ({ type: "object", additionalProperties: true, description }),
+  obj: (properties                     , required           = []) => ({
     type: "object",
     properties,
     ...(required.length ? { required } : {}),
@@ -454,11 +463,11 @@ const PARSE_HELP = "参数细节见 blender_rt_plan(op=\"catalog\", args={tool:\
 // 扩展主体
 // ---------------------------------------------------------------------------
 
-export default function piBlenderRt(pi: ExtensionAPI) {
+export default function piBlenderRt(pi              ) {
   const P = port();
 
   /** 统一前置：确保后端在；返回错误文本或 null */
-  async function ready(): Promise<string | null> {
+  async function ready()                         {
     if (await ensureBackend()) return null;
     return BACKEND_HELP(P, paused);
   }
@@ -486,7 +495,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       addon_file: S.str("【launch】按文件 import 的 addon .py 绝对路径（Blender 5.x extension 布局兜底）"),
       dry_run: S.bool("【launch】true = 只回报将执行的命令"),
     }),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const op = String((args && args.op) || "status");
       if (op === "start") {
         paused = false;
@@ -498,10 +507,10 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       }
       if (op === "stop") {
         paused = true;
-        const notes: string[] = [];
+        const notes           = [];
         if (child) {
           try {
-            (child as any).kill();
+            (child       ).kill();
           } catch {
             /* ignore */
           }
@@ -549,7 +558,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
               ].join("\n"),
             );
           }
-          const body: any = { holder: String((args && args.holder) || HOLDER) };
+          const body      = { holder: String((args && args.holder) || HOLDER) };
           if (args && args.ttl_ms) body.ttlMs = Number(args.ttl_ms);
           if (op === "lease" && args && args.force) body.force = true;
           const r = await backendPost(op === "lease" ? "/lease" : "/release", body, 20000);
@@ -559,13 +568,13 @@ export default function piBlenderRt(pi: ExtensionAPI) {
             );
           }
           return textResult((op === "lease" ? "LEASE " : "RELEASE ") + JSON.stringify(r));
-        } catch (e: any) {
+        } catch (e     ) {
           return textResult(op + " 失败：" + String(e?.message || e) + "（后端没起？blender_viewport op=start）");
         }
       }
       if (op === "launch") {
         try {
-          const body: any = {};
+          const body      = {};
           if (args && args.wait_ms) body.waitMs = Number(args.wait_ms);
           if (args && args.file) body.file = String(args.file);
           if (args && args.exe) body.exe = String(args.exe);
@@ -577,7 +586,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
           if (args && args.addon_file) body.addonFile = String(args.addon_file);
           if (args && args.dry_run) body.dryRun = true;
           const r = await backendPost("/launch", body, Math.max(30000, Number((args && args.wait_ms) || 90000) + 30000));
-          const lines: string[] = [];
+          const lines           = [];
           lines.push(
             (r && r.ok ? "LAUNCH ok" : "LAUNCH 未成功") +
               (r && r.already ? " · 已在监听（幂等）" : "") +
@@ -599,7 +608,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
           const doc = r && r.doctor;
           if (doc && doc.addon) lines.push("启动后体检：" + String(doc.addon.summary || JSON.stringify(doc.addon)).slice(0, 400));
           return textResult(lines.join("\n"));
-        } catch (e: any) {
+        } catch (e     ) {
           return textResult("launch 失败：" + String(e?.message || e) + "（后端没起？先 blender_viewport op=start）");
         }
       }
@@ -608,7 +617,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
         if (op === "doctor") {
           const d = await backendGet("/doctor", 60000);
           const diag = (d && d.diagnosis) || null;
-          const lines: string[] = [];
+          const lines           = [];
           lines.push("诊断：" + String((d && d.kind) || (diag && diag.kind) || (d && d.ok ? "ok" : "unknown")));
           lines.push("宿主：pi-blender-rt（pi 扩展）@ " + HERE);
           if (diag && diag.summary) lines.push("结论：" + diag.summary);
@@ -622,7 +631,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
         }
         const s = await backendGet("/status", 15000);
         return textResult(clip(s, 3000));
-      } catch (e: any) {
+      } catch (e     ) {
         return textResult("体检失败：" + String(e?.message || e) + "（后端可能没起：blender_viewport op=start）");
       }
     },
@@ -653,7 +662,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       diagnostics: S.bool("强制跑诊断三项（coverage/scene_bbox/objects_in_frame）；默认近空帧才补跑"),
       force: S.bool("与上一帧 hash 相同时也强制重发图片"),
     }),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const size = Math.max(120, Math.min(1600, Number((args && args.max_size) || 560)));
@@ -663,7 +672,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       const look = numTriple(args && args.look_at);
       try {
         if (frm || look) {
-          const spec: any = {
+          const spec      = {
             from: frm || [7, -7, 5],
             look_at: look || [0, 0, 1],
             lens: args?.lens === undefined ? undefined : Number(args.lens),
@@ -716,7 +725,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
         const text = (full ? "区域截图 · " : "视口帧 " + size + "px · ") + f.ms + "ms · hash " + f.hash;
         if (dd.dup) return textResult(text + dedupeNote(dd.repeats));
         return imgResult(text, [f.png]);
-      } catch (e: any) {
+      } catch (e     ) {
         return textResult("SEE 失败：" + String(e?.message || e));
       }
     },
@@ -736,18 +745,18 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       max_size: S.int("回帧最长边像素，默认 560"),
       force: S.bool("回帧与上一帧 hash 相同时也强制重发"),
     }),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const code = String((args && args.code) || "");
       const file = args && args.file ? String(args.file) : null;
       if (!code && !file) return textResult("需要 code 或 file 之一");
-      const body: any = { code };
+      const body      = { code };
       if (file) body.file = file;
       const r = await backendPost("/act", body, 180000);
       const lt = leasedText(r);
       if (lt) return textResult(lt);
-      const parts: string[] = [];
+      const parts           = [];
       parts.push(r?.ok ? "ACT ok · " + String(r.ms) + "ms" : "ACT 失败 · " + String(r?.error || r?.raw || "unknown"));
       if (r && Number(r.mainThreadMs) > 1000) parts.push("⚠️ 占用主线程约 " + String(r.mainThreadMs) + "ms —— 重活改走 headless/worker");
       if (r?.stderr && String(r.stderr).trim()) parts.push("stderr: " + String(r.stderr).trim().slice(0, 1200));
@@ -765,7 +774,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
         }
         parts.push("SEE " + size + "px · " + f.ms + "ms · hash " + f.hash);
         return imgResult(parts.join("\n"), [f.png]);
-      } catch (e: any) {
+      } catch (e     ) {
         parts.push("SEE 失败: " + String(e?.message || e));
         return textResult(parts.join("\n"));
       }
@@ -783,20 +792,20 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       fps: S.num("采样率，默认 4（0.5-8）"),
       max_size: S.int("帧最长边像素，默认 420"),
     }),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const seconds = Math.max(0.2, Math.min(20, Number((args && args.seconds) || 2)));
       const fps = Math.max(0.5, Math.min(8, Number((args && args.fps) || 4)));
       const size = Math.max(120, Math.min(1600, Number((args && args.max_size) || 420)));
-      const parts: string[] = [];
+      const parts           = [];
       if (args && args.code) {
         const r = await backendPost("/act", { code: String(args.code) }, 180000);
         parts.push(r?.ok ? "ACT ok · " + String(r.ms) + "ms" : "ACT 失败 · " + String(r?.error || ""));
       }
       const total = Math.max(1, Math.min(32, Math.round(seconds * fps)));
       const interval = (seconds * 1000) / total;
-      const shots: any[] = [];
+      const shots        = [];
       const t0 = Date.now();
       for (let i = 0; i < total; i++) {
         try {
@@ -813,7 +822,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       const avgMs = Math.round(shots.reduce((a, s) => a + Math.max(0, s.ms), 0) / Math.max(1, shots.length));
       parts.push("WATCH " + seconds + "s @" + fps + "fps → " + shots.length + " 帧 · 平均 " + avgMs + "ms/帧 · 不同画面 " + distinct + "/" + hashes.length);
       parts.push("timeline: " + shots.map((s, i) => i + "@" + s.t + "ms:" + s.hash).join(" "));
-      const picks: any[] = [];
+      const picks        = [];
       if (shots.length <= 6) {
         for (const s of shots) if (s.png) picks.push(s);
       } else {
@@ -842,7 +851,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["name"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const name = String((args && args.name) || "");
@@ -866,7 +875,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       if (err) return textResult(err);
       const r = await backendGet("/commands", 120000);
       if (!r || r.ok !== true) return textResult("COMMANDS 失败 · " + String(r?.error || r?.raw || "unknown"));
-      const lines: string[] = [];
+      const lines           = [];
       lines.push("场景 " + String(r.scene) + (r.file ? " · 文件 " + String(r.file) : " · 未保存文件"));
       lines.push("可用命令 " + String(r.total) + " 条；被集成开关挡住 " + String((r.disabled || []).length) + " 条");
       lines.push("集成：" + Object.keys(r.integrations || {}).map((k) => k + "=" + (r.integrations[k].enabled ? "on" : "off")).join(" · "));
@@ -902,7 +911,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((args && args.op) || "status");
@@ -941,7 +950,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((args && args.op) || "status");
@@ -968,7 +977,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((args && args.op) || "analyze");
@@ -1012,13 +1021,13 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       gpu: S.str("仅 cycles：auto | true（必须有 GPU 否则 ok=false）| false"),
       include_noise: S.bool("产物清单是否含 __pycache__/*.blend1 等噪音（默认 false）"),
     }),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const runId = newRunId();
       const asJob = !!(args && args.as_job);
       const waitS = args?.wait_s !== undefined && args?.wait_s !== null && args?.wait_s !== "" ? Number(args.wait_s) : null;
-      const body: any = {
+      const body      = {
         script: String(args?.script || ""),
         file: args?.file || undefined,
         outdir: args?.outdir || undefined,
@@ -1057,10 +1066,10 @@ export default function piBlenderRt(pi: ExtensionAPI) {
         return textResult("已后台化 job=" + id + "（pid " + String(j.pid || "?") + "）。用 blender_rt_job op=wait id=" + id + " 阻塞等结果，op=collect 看进展");
       }
 
-      let res: any = null;
+      let res      = null;
       try {
         res = await backendPost("/headless", body, Math.min(serverBudget, 102000));
-      } catch (e: any) {
+      } catch (e     ) {
         // 客户端等待窗口到点 —— 服务端子进程仍在跑，按 runId 收
         return textResult(
           "客户端等待窗口到点（**不是失败**，服务端继续跑）。用 blender_rt_job(op=\"collect/wait\", id=\"" + runId + "\") 收结果。错误：" + String(e?.message || e),
@@ -1095,7 +1104,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, argsIn: any) {
+    async execute(_id, argsIn     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((argsIn && argsIn.op) || "status");
@@ -1136,11 +1145,11 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((args && args.op) || "status");
-      const body: any = { op };
+      const body      = { op };
       if (args && args.code !== undefined) body.code = String(args.code);
       if (args && args.timeout_ms) body.timeoutMs = Number(args.timeout_ms);
       if (args && args.gpu) body.gpu = String(args.gpu);
@@ -1193,11 +1202,11 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((args && args.op) || "list");
-      const body: any = { op };
+      const body      = { op };
       if (args && args.id) body.id = String(args.id);
       if (args && args.script !== undefined) body.script = String(args.script);
       if (args && args.script_file) body.scriptFile = String(args.script_file);
@@ -1239,11 +1248,11 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((args && args.op) || "list");
-      const a: any = {};
+      const a      = {};
       if (args && args.label) a.label = String(args.label);
       if (args && args.note) a.note = String(args.note);
       if (args && args.keep) a.keep = Number(args.keep);
@@ -1278,11 +1287,11 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       },
       ["op"],
     ),
-    async execute(_id, args: any) {
+    async execute(_id, args     ) {
       const err = await ready();
       if (err) return textResult(err);
       const op = String((args && args.op) || "list");
-      const a: any = {};
+      const a      = {};
       if (args && args.name) a.name = String(args.name);
       if (args && args.kind) a.kind = String(args.kind);
       if (args && args.note) a.note = String(args.note);
@@ -1293,7 +1302,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       if (args && args.data) {
         try {
           a.data = JSON.parse(String(args.data));
-        } catch (e: any) {
+        } catch (e     ) {
           return textResult("data 不是合法 JSON: " + String(e?.message || e).slice(0, 120));
         }
       }
@@ -1314,13 +1323,13 @@ export default function piBlenderRt(pi: ExtensionAPI) {
       try {
         if (sub === "see") {
           const f = await fetchFrame(560);
-          const ui = ctx.ui as any;
+          const ui = ctx.ui       ;
           if (typeof ui.showImage === "function") await ui.showImage(f.png.toString("base64"));
           ctx.ui.notify("视口帧 " + f.ms + "ms · hash " + f.hash + (typeof ui.showImage === "function" ? "" : "（TUI 不支持内联出图，用 blender_rt_see 工具看）"), "info");
           return;
         }
         if (sub === "launch") {
-          const body: any = {};
+          const body      = {};
           const exe = detectBlenderExe();
           if (exe) body.exe = exe;
           const r = await backendPost("/launch", body, 120000);
@@ -1341,7 +1350,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
         const path = sub === "status" ? "/status" : "/doctor";
         const d = await backendGet(path, 60000);
         ctx.ui.notify(path + " → " + String(d?.kind || d?.ok || "?"), "info");
-      } catch (e: any) {
+      } catch (e     ) {
         ctx.ui.notify("/blender " + sub + " 失败：" + String(e?.message || e), "error");
       }
     },
@@ -1349,7 +1358,7 @@ export default function piBlenderRt(pi: ExtensionAPI) {
 }
 
 /** 后端不可用时的统一指引 */
-function BACKEND_HELP(p: number, isPaused: boolean): string {
+function BACKEND_HELP(p        , isPaused         )         {
   if (isPaused) return "后端已被手动停止（blender_viewport op=stop）。要恢复：blender_viewport op=start";
   return (
     "后端不可用（127.0.0.1:" +
